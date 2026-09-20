@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #1e1e1e;
+            color: white;
+        }
+        video {
+            width: 100%;
+            /* Expanded max-width so you can actually see the higher definition video quality */
+            max-width: 960px; 
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            background-color: #000;
+        }
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            transition: background-color 0.2s;
+        }
+        #start-btn {
+            background-color: #007bff;
+        }
+        #start-btn:hover {
+            background-color: #0056b3;
+        }
+        #fullscreen-btn {
+            background-color: #6c757d;
+        }
+        #fullscreen-btn:hover {
+            background-color: #5a6268;
+        }
+        #abort-btn {
+            background-color: #dc3545;
+        }
+        #abort-btn:hover {
+            background-color: #bd2130;
+        }
+        button:disabled {
+            background-color: #444 !important;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        #error-message {
+            color: #ff6b6b;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Image Viewer</h1>
+    
+    <video id="live-feed" autoplay></video>
+    
+    <div class="controls">
+        <button id="start-btn">View</button>
+        <button id="fullscreen-btn" disabled>Fullscreen</button>
+        <button id="abort-btn" disabled>Stop Viewing</button>
+    </div>
+    
+    <div id="error-message"></div>
+
+    <script>
+        const videoElement = document.getElementById('live-feed');
+        const startButton = document.getElementById('start-btn');
+        const fullscreenButton = document.getElementById('fullscreen-btn');
+        const abortButton = document.getElementById('abort-btn');
+        const errorMessage = document.getElementById('error-message');
+        
+        let localStream = null;
+
+        // --- CORE ABORT FUNCTION (RESET ONLY) ---
+        function abortStream() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                videoElement.srcObject = null;
+                localStream = null;
+            }
+
+            startButton.disabled = false;
+            startButton.textContent = "View"; 
+            fullscreenButton.disabled = true;
+            abortButton.disabled = true;
+            errorMessage.textContent = "Stream disconnected successfully.";
+        }
+
+        // --- START STREAM ---
+        startButton.addEventListener('click', async () => {
+            errorMessage.textContent = "";
+            
+            // --- MAXIMUM QUALITY CONSTRAINTS ---
+            const constraints = {
+                video: {
+                    width: { ideal: 1920 },       // Requests 1080p resolution width
+                    height: { ideal: 1080 },     // Requests 1080p resolution height
+                    frameRate: { ideal: 60 },    // Requests 60 FPS for ultra-smooth motion
+                    facingMode: "user"           // Defaults to the front/primary camera
+                },
+                audio: {
+                    echoCancellation: false,     // Stops gating/chopping up live audio
+                    noiseSuppression: false,     // Keeps audio raw and crisp without muffling
+                    autoGainControl: false,      // Prevents fluctuating volume levels
+                    channelCount: 2,             // Enables stereo recording if available
+                    sampleRate: 48000,           // Studio-grade 48kHz hardware processing
+                    sampleSize: 16               // Standard high-definition audio depth
+                }
+            };
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia(constraints);
+                videoElement.srcObject = localStream;
+                
+                startButton.disabled = true;
+                startButton.textContent = "Feed Active";
+                fullscreenButton.disabled = false;
+                abortButton.disabled = false;
+                
+            } catch (error) {
+                console.error('Error accessing media devices.', error);
+                
+                // Fallback: If 1080p/60fps is strictly rejected by older hardware, try basic settings
+                if (error.name === 'OverconstrainedError' || error.name === 'ConstraintNotSatisfiedError') {
+                    try {
+                        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                        videoElement.srcObject = localStream;
+                        startButton.disabled = true;
+                        startButton.textContent = "Feed Active (Fallback Quality)";
+                        fullscreenButton.disabled = false;
+                        abortButton.disabled = false;
+                        return;
+                    } catch (retryError) {
+                        errorMessage.textContent = "Could not initialize hardware: " + retryError.message;
+                    }
+                }
+                
+                if (error.name === 'NotAllowedError') {
+                    errorMessage.textContent = "Permission denied. Please allow access to your camera and microphone.";
+                } else {
+                    errorMessage.textContent = "An error occurred: " + error.message;
+                }
+            }
+        });
+
+        // --- FULLSCREEN ---
+        fullscreenButton.addEventListener('click', () => {
+            if (videoElement.requestFullscreen) {
+                videoElement.requestFullscreen();
+            } else if (videoElement.webkitRequestFullscreen) { /* Safari */
+                videoElement.webkitRequestFullscreen();
+            } else if (videoElement.msRequestFullscreen) { /* IE11 */
+                videoElement.msRequestFullscreen();
+            }
+        });
+
+        // --- ABORT BUTTON CLICK ---
+        abortButton.addEventListener('click', abortStream);
+
+        // --- SPACEBAR KEYPRESS LISTENER ---
+        window.addEventListener('keydown', (event) => {
+            if (event.key === ' ' || event.code === 'Space') {
+                event.preventDefault(); 
+                abortStream();
+            }
+        });
+    </script>
+</body>
+</html>
